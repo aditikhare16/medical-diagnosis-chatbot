@@ -1,7 +1,3 @@
-![chatbot](https://github.com/user-attachments/assets/afd33046-b186-4308-a83d-03becdad6d06)
-
-
-
 The **Disease Prediction System** is a machine learning-based application that predicts diseases based on user-provided symptoms and offers detailed descriptions and precautions for each disease. It also allows users to fetch comprehensive information about a specific disease.
 
 #### **Technologies Used**:
