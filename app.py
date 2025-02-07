@@ -1,6 +1,6 @@
 import pandas as pd
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
+from tkinter import messagebox, scrolledtext
 
 # Load CSV Files
 try:
@@ -31,17 +31,6 @@ def getPrecautions(disease):
     return "\n".join([p for p in precautions if pd.notna(p)])
 
 # Function to get disease based on symptoms
-#def getDiseaseBySymptoms(symptoms):
-    symptoms_list = [s.strip().lower() for s in symptoms.split(",") if s.strip()]
-    symptoms_data_lower = symptoms_data.applymap(lambda x: x.lower() if isinstance(x, str) else x)
-   
-    symptoms_data_lower["match_count"] = symptoms_data_lower.iloc[:, 1:].apply(
-        lambda row: sum(sym in row.values for sym in symptoms_list), axis=1
-    )
-   
-    best_match = symptoms_data_lower.sort_values(by="match_count", ascending=False).iloc[0]
-    return best_match["Disease"] if best_match["match_count"] > 0 else "No matching disease found."
-
 def getDiseaseBySymptoms(symptoms):
     symptoms_list = [s.strip().lower() for s in symptoms.split(",") if s.strip()]
     
@@ -62,73 +51,88 @@ def getDiseaseBySymptoms(symptoms):
     # Check if there was at least one match
     return best_match["Disease"] if best_match["match_count"] > 0 else "No matching disease found."
 
+# Function to update input label dynamically
+def update_input_label(*args):
+    selected_option = option_var.get()
+    if selected_option == "Symptom-Based Prediction":
+        input_label.config(text="Enter Symptoms (comma-separated):")
+    else:
+        input_label.config(text="Enter Disease Name:")
 
-# Function to get input from user and display results
+# Function to process user input
 def get_input():
-    disease = entry_disease.get().strip()
-    if not disease:
-        messagebox.showwarning("Input Error", "Please enter a disease name.")
+    user_input = input_entry.get().strip()
+    
+    if not user_input:
+        messagebox.showwarning("Input Error", "Please enter valid input.")
         return
 
-    description = getDiseaseDetails(disease)
-    precautions = getPrecautions(disease)
-   
-    result_textbox.config(state=tk.NORMAL)
-    result_textbox.delete("1.0", tk.END)
-    result_textbox.insert(tk.END, f"Disease Description:\n{description}\n\nPrecautions:\n{precautions}")
-    result_textbox.config(state=tk.DISABLED)
+    selected_option = option_var.get()
 
-# Function to predict disease from symptoms
-def predict_disease():
-    symptoms = entry_symptoms.get().strip()
-    if not symptoms:
-        messagebox.showwarning("Input Error", "Please enter symptoms separated by commas.")
-        return
+    if selected_option == "Symptom-Based Prediction":
+        predicted_disease = getDiseaseBySymptoms(user_input)
+        
+        if predicted_disease == "No matching disease found.":
+            result_textbox.config(state=tk.NORMAL)
+            result_textbox.delete("1.0", tk.END)
+            result_textbox.insert(tk.END, predicted_disease)
+            result_textbox.config(state=tk.DISABLED)
+            return
 
-    predicted_disease = getDiseaseBySymptoms(symptoms)
-   
-    prediction_textbox.config(state=tk.NORMAL)
-    prediction_textbox.delete("1.0", tk.END)
-    prediction_textbox.insert(tk.END, f"Predicted Disease: {predicted_disease}")
-    prediction_textbox.config(state=tk.DISABLED)
+        description = getDiseaseDetails(predicted_disease)
+        precautions = getPrecautions(predicted_disease)
 
-# Creating the main UI window
+        result_textbox.config(state=tk.NORMAL)
+        result_textbox.delete("1.0", tk.END)
+        result_textbox.insert(tk.END, f"Predicted Disease: {predicted_disease}\n\n")
+        result_textbox.insert(tk.END, f"Disease Description:\n{description}\n\n")
+        result_textbox.insert(tk.END, f"Precautions:\n{precautions}")
+        result_textbox.config(state=tk.DISABLED)
+
+    else:
+        description = getDiseaseDetails(user_input)
+        precautions = getPrecautions(user_input)
+
+        result_textbox.config(state=tk.NORMAL)
+        result_textbox.delete("1.0", tk.END)
+        result_textbox.insert(tk.END, f"Disease Description:\n{description}\n\n")
+        result_textbox.insert(tk.END, f"Precautions:\n{precautions}")
+        result_textbox.config(state=tk.DISABLED)
+
+# Setting up the GUI
 root = tk.Tk()
-root.title("Medical Diagnosis Chatbot")
-root.geometry("600x600")
-root.configure(bg="#f0f0f0")
+root.title("Disease Prediction System")
+root.geometry("700x600")
+root.configure(bg="#f8f9fa")
 
-# Title Label
-title_label = tk.Label(root, text="Medical Diagnosis Chatbot", font=("Arial", 16, "bold"), bg="#f0f0f0", fg="#333")
-title_label.pack(pady=10)
+# Wall-E Greeting
+greeting_label = tk.Label(root, text="Hi! I'm Wall-E. How can I help you today?", font=("Arial", 16, "bold"), bg="#f8f9fa", fg="#333")
+greeting_label.pack(pady=20)
 
-# Disease Input Section
-frame_disease = tk.Frame(root, bg="#f0f0f0")
-frame_disease.pack(pady=5, padx=20, fill="x")
+# Option to select between symptom-based prediction or disease details
+option_var = tk.StringVar(value="Symptom-Based Prediction")
+option_var.trace("w", update_input_label)
 
-tk.Label(frame_disease, text="Enter Disease Name:", font=("Arial", 12), bg="#f0f0f0").pack(side="left", padx=5)
-entry_disease = tk.Entry(frame_disease, width=40, font=("Arial", 12))
-entry_disease.pack(side="left", padx=5)
-tk.Button(frame_disease, text="Get Details", command=get_input, font=("Arial", 12), bg="#4CAF50", fg="white").pack(side="left", padx=5)
+tk.Label(root, text="Select an option:", font=("Arial", 12), bg="#f8f9fa").pack(pady=10)
+option_menu = tk.OptionMenu(root, option_var, "Symptom-Based Prediction", "Disease Details")
+option_menu.config(font=("Arial", 12), bg="#ffffff", fg="#333", width=25)
+option_menu.pack(pady=5)
 
-# Disease Details Output
-result_textbox = scrolledtext.ScrolledText(root, width=60, height=6, wrap=tk.WORD, font=("Arial", 12))
+# Input label and entry field (dynamically changes based on option selected)
+input_label = tk.Label(root, text="Enter Symptoms (comma-separated):", font=("Arial", 12), bg="#f8f9fa")
+input_label.pack(pady=10)
+
+input_entry = tk.Entry(root, width=50, font=("Arial", 12))
+input_entry.pack(pady=5)
+
+# Button to submit input
+submit_button = tk.Button(root, text="Submit", command=get_input, font=("Arial", 12, "bold"), bg="#2196F3", fg="white", width=15)
+submit_button.pack(pady=10)
+
+# Result display area
+result_textbox = scrolledtext.ScrolledText(root, width=70, height=10, wrap=tk.WORD, font=("Arial", 12))
 result_textbox.pack(pady=10, padx=20)
 result_textbox.config(state=tk.DISABLED)
 
-# Symptoms Input Section
-frame_symptoms = tk.Frame(root, bg="#f0f0f0")
-frame_symptoms.pack(pady=5, padx=20, fill="x")
-
-tk.Label(frame_symptoms, text="Enter Symptoms (comma-separated):", font=("Arial", 12), bg="#f0f0f0").pack(side="left", padx=5)
-entry_symptoms = tk.Entry(frame_symptoms, width=40, font=("Arial", 12))
-entry_symptoms.pack(side="left", padx=5)
-tk.Button(frame_symptoms, text="Predict Disease", command=predict_disease, font=("Arial", 12), bg="#2196F3", fg="white").pack(side="left", padx=5)
-
-# Predicted Disease Output
-prediction_textbox = scrolledtext.ScrolledText(root, width=60, height=4, wrap=tk.WORD, font=("Arial", 12))
-prediction_textbox.pack(pady=10, padx=20)
-prediction_textbox.config(state=tk.DISABLED)
-
-# Run the GUI
+# Start the Tkinter event loop
 root.mainloop()
