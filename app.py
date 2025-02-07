@@ -1,161 +1,134 @@
-import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
-from sklearn.svm import SVC
-from sklearn.naive_bayes import GaussianNB
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-import statistics
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox, scrolledtext
 
-# ------ Reading the training data and removing empty columns ------ #
-DATA_PATH = "Training.csv"
-data = pd.read_csv(DATA_PATH).dropna(axis=1)
+# Load CSV Files
+try:
+    description_data = pd.read_csv("disease_description.csv")
+    precautions_data = pd.read_csv("disease_precautions.csv")
+    symptoms_data = pd.read_csv("disease_symptoms.csv")
 
-# ------ Reading precaution and description data from CSV files ------ #
-precaution_data = pd.read_csv("symptom_precaution.csv")
-description_data = pd.read_csv("symptom_Description.csv")
+    # Strip spaces from column names
+    description_data.columns = description_data.columns.str.strip()
+    precautions_data.columns = precautions_data.columns.str.strip()
+    symptoms_data.columns = symptoms_data.columns.str.strip()
 
-# ------ Encoding the target variable (disease) into numerical format ------ #
-encoder = LabelEncoder()
-data["Disease"] = encoder.fit_transform(data["Disease"])
+except FileNotFoundError:
+    messagebox.showerror("Error", "CSV files not found. Please check file names.")
+    exit()
 
-# ------ Convert symptoms into binary format (1 for present, 0 for absent) ------ #
-X = data.iloc[:, :-1]
-X = pd.get_dummies(X)  # One-hot encoding for symptom names
-y = np.array(data["Disease"])
-
-# ------ Splitting data into training and testing sets ------ #
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=24)
-
-# ------ Training models ------ #
-final_svm_model = SVC()
-final_nb_model = GaussianNB()
-final_rf_model = RandomForestClassifier(random_state=18)
-final_svm_model.fit(X, y)
-final_nb_model.fit(X, y)
-final_rf_model.fit(X, y)
-
-# ------ Creating a dictionary for symptom lookup ------ #
-symptoms = X.columns.values
-symptom_index = {symptom.replace("_", " ").capitalize(): i for i, symptom in enumerate(symptoms)}
-
-data_dict = {
-    "symptom_index": symptom_index,
-    "predictions_classes": encoder.classes_
-}
-
-# ------ Function to predict disease ------ #
-def predictDisease(symptoms):
-    symptoms = symptoms.split(", ")
-    input_data = [0] * len(data_dict["symptom_index"])
-    
-    for symptom in symptoms:
-        # Normalize the symptom by stripping extra spaces and capitalizing
-        normalized_symptom = symptom.strip().lower().replace(" ", "_")
-        
-        print(f"Normalized symptom: {normalized_symptom}")  # Debugging line
-        
-        if normalized_symptom in data_dict["symptom_index"]:
-            index = data_dict["symptom_index"][normalized_symptom]
-            input_data[index] = 1
-        else:
-            messagebox.showerror("Error", f"Symptom '{symptom}' not found in the dataset.")
-            return None
-    
-    input_data = np.array(input_data).reshape(1, -1)
-    input_data_df = pd.DataFrame(input_data, columns=X.columns)
-
-    rf_prediction = final_rf_model.predict(input_data_df)[0]
-    nb_prediction = final_nb_model.predict(input_data_df)[0]
-    svm_prediction = final_svm_model.predict(input_data_df)[0]
-
-    final_prediction = statistics.mode([ 
-        data_dict["predictions_classes"][rf_prediction],
-        data_dict["predictions_classes"][nb_prediction],
-        data_dict["predictions_classes"][svm_prediction]
-    ])
-
-    try:
-        precautions = precaution_data[precaution_data["disease"] == final_prediction].iloc[0, 1:].dropna().values
-    except IndexError:
-        precautions = ["No precautions available for this disease."]
-    
-    try:
-        description = description_data[description_data["disease"] == final_prediction]["Description"].values[0]
-    except IndexError:
-        description = "No description available for this disease."
-    
-    return {
-        "final_prediction": final_prediction,
-        "precautions": precautions,
-        "description": description
-    }
-
-# ------ Function to fetch disease details ------ #
+# Function to get disease description
 def getDiseaseDetails(disease):
-    try:
-        description = description_data[description_data["disease"] == disease]["Description"].values[0]
-        precautions = precaution_data[precaution_data["disease"] == disease].iloc[0, 1:].dropna().values
-    except IndexError:
-        description = ["No description available for this disease."]
-        precautions = ["No precautions available for this disease."]
-    
-    return {
-        "description": description,
-        "precautions": precautions
-    }
+    result = description_data[description_data["Disease"].str.lower() == disease.lower()]["Description"]
+    return result.values[0] if not result.empty else "Disease not found in database."
 
-# ------ Function to get input and make predictions ------ #
+# Function to get precautions for a disease
+def getPrecautions(disease):
+    result = precautions_data[precautions_data["Disease"].str.lower() == disease.lower()]
+    if result.empty:
+        return "No precautions found."
+    precautions = result.iloc[:, 1:].values.flatten()
+    return "\n".join([p for p in precautions if pd.notna(p)])
+
+# Function to get disease based on symptoms
+#def getDiseaseBySymptoms(symptoms):
+    symptoms_list = [s.strip().lower() for s in symptoms.split(",") if s.strip()]
+    symptoms_data_lower = symptoms_data.applymap(lambda x: x.lower() if isinstance(x, str) else x)
+   
+    symptoms_data_lower["match_count"] = symptoms_data_lower.iloc[:, 1:].apply(
+        lambda row: sum(sym in row.values for sym in symptoms_list), axis=1
+    )
+   
+    best_match = symptoms_data_lower.sort_values(by="match_count", ascending=False).iloc[0]
+    return best_match["Disease"] if best_match["match_count"] > 0 else "No matching disease found."
+
+def getDiseaseBySymptoms(symptoms):
+    symptoms_list = [s.strip().lower() for s in symptoms.split(",") if s.strip()]
+    
+    # Ensure all symptom values are properly formatted
+    symptoms_data_cleaned = symptoms_data.copy()
+    symptoms_data_cleaned.iloc[:, 1:] = symptoms_data_cleaned.iloc[:, 1:].applymap(
+        lambda x: x.strip().lower() if isinstance(x, str) else x
+    )
+
+    # Count how many symptoms match per disease
+    symptoms_data_cleaned["match_count"] = symptoms_data_cleaned.iloc[:, 1:].apply(
+        lambda row: sum(sym in row.values for sym in symptoms_list), axis=1
+    )
+    
+    # Get the best-matching disease
+    best_match = symptoms_data_cleaned.loc[symptoms_data_cleaned["match_count"].idxmax()]
+
+    # Check if there was at least one match
+    return best_match["Disease"] if best_match["match_count"] > 0 else "No matching disease found."
+
+
+# Function to get input from user and display results
 def get_input():
-    if option_var.get() == "Symptom-Based Prediction":
-        symptoms = input_entry.get()
-        if symptoms:
-            result = predictDisease(symptoms)
-            if result:
-                result_label.config(text=f"Final Prediction: {result['final_prediction']}\n"
-                                       f"Description: {result['description']}\n"
-                                       f"Precautions: {', '.join(result['precautions'])}")
-            else:
-                result_label.config(text="No valid prediction found.")
-        else:
-            messagebox.showerror("Input Error", "Please enter some symptoms.")
-    
-    elif option_var.get() == "Disease Details":
-        disease = input_entry.get()
-        if disease:
-            result = getDiseaseDetails(disease)
-            if result:
-                result_label.config(text=f"Disease: {disease}\n"
-                                       f"Description: {result['description']}\n"
-                                       f"Precautions: {', '.join(result['precautions'])}")
-            else:
-                result_label.config(text="No valid details found for this disease.")
-        else:
-            messagebox.showerror("Input Error", "Please enter a disease name.")
+    disease = entry_disease.get().strip()
+    if not disease:
+        messagebox.showwarning("Input Error", "Please enter a disease name.")
+        return
 
-# ------ Function to update input label based on user selection ------ #
-def update_input_label(*args):
-    input_label.config(text="Enter Symptoms (comma-separated):" if option_var.get() == "Symptom-Based Prediction" else "Enter Disease Name:")
+    description = getDiseaseDetails(disease)
+    precautions = getPrecautions(disease)
+   
+    result_textbox.config(state=tk.NORMAL)
+    result_textbox.delete("1.0", tk.END)
+    result_textbox.insert(tk.END, f"Disease Description:\n{description}\n\nPrecautions:\n{precautions}")
+    result_textbox.config(state=tk.DISABLED)
 
-# ------ Setting up GUI ------ #
+# Function to predict disease from symptoms
+def predict_disease():
+    symptoms = entry_symptoms.get().strip()
+    if not symptoms:
+        messagebox.showwarning("Input Error", "Please enter symptoms separated by commas.")
+        return
+
+    predicted_disease = getDiseaseBySymptoms(symptoms)
+   
+    prediction_textbox.config(state=tk.NORMAL)
+    prediction_textbox.delete("1.0", tk.END)
+    prediction_textbox.insert(tk.END, f"Predicted Disease: {predicted_disease}")
+    prediction_textbox.config(state=tk.DISABLED)
+
+# Creating the main UI window
 root = tk.Tk()
-root.title("Disease Prediction System")
-tk.Label(root, text="Hi! I'm Wall-E. How can I help you today?", font=("Arial", 16)).pack(pady=20)
+root.title("Medical Diagnosis Chatbot")
+root.geometry("600x600")
+root.configure(bg="#f0f0f0")
 
-option_var = tk.StringVar(value="Symptom-Based Prediction")
-option_var.trace("w", update_input_label)
-tk.Label(root, text="Select an option:").pack(pady=10)
-tk.OptionMenu(root, option_var, "Symptom-Based Prediction", "Disease Details").pack(pady=5)
+# Title Label
+title_label = tk.Label(root, text="Medical Diagnosis Chatbot", font=("Arial", 16, "bold"), bg="#f0f0f0", fg="#333")
+title_label.pack(pady=10)
 
-input_label = tk.Label(root, text="Enter Symptoms (comma-separated):")
-input_label.pack(pady=10)
-input_entry = tk.Entry(root, width=50)
-input_entry.pack(pady=5)
+# Disease Input Section
+frame_disease = tk.Frame(root, bg="#f0f0f0")
+frame_disease.pack(pady=5, padx=20, fill="x")
 
-tk.Button(root, text="Submit", command=get_input).pack(pady=10)
-result_label = tk.Label(root, text="", font=("Arial", 12), wraplength=400)
-result_label.pack(pady=10)
+tk.Label(frame_disease, text="Enter Disease Name:", font=("Arial", 12), bg="#f0f0f0").pack(side="left", padx=5)
+entry_disease = tk.Entry(frame_disease, width=40, font=("Arial", 12))
+entry_disease.pack(side="left", padx=5)
+tk.Button(frame_disease, text="Get Details", command=get_input, font=("Arial", 12), bg="#4CAF50", fg="white").pack(side="left", padx=5)
 
+# Disease Details Output
+result_textbox = scrolledtext.ScrolledText(root, width=60, height=6, wrap=tk.WORD, font=("Arial", 12))
+result_textbox.pack(pady=10, padx=20)
+result_textbox.config(state=tk.DISABLED)
+
+# Symptoms Input Section
+frame_symptoms = tk.Frame(root, bg="#f0f0f0")
+frame_symptoms.pack(pady=5, padx=20, fill="x")
+
+tk.Label(frame_symptoms, text="Enter Symptoms (comma-separated):", font=("Arial", 12), bg="#f0f0f0").pack(side="left", padx=5)
+entry_symptoms = tk.Entry(frame_symptoms, width=40, font=("Arial", 12))
+entry_symptoms.pack(side="left", padx=5)
+tk.Button(frame_symptoms, text="Predict Disease", command=predict_disease, font=("Arial", 12), bg="#2196F3", fg="white").pack(side="left", padx=5)
+
+# Predicted Disease Output
+prediction_textbox = scrolledtext.ScrolledText(root, width=60, height=4, wrap=tk.WORD, font=("Arial", 12))
+prediction_textbox.pack(pady=10, padx=20)
+prediction_textbox.config(state=tk.DISABLED)
+
+# Run the GUI
 root.mainloop()
